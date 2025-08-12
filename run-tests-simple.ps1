@@ -205,24 +205,46 @@ if ($GenerateReports -and $GenerateCoverage) {
             $globalTools = dotnet tool list --global 2>$null
             if ($globalTools -match "reportgenerator") { 
                 $reportGeneratorExists = $true 
+                Write-Host "ReportGenerator found in global tools" -ForegroundColor Green
+            } else {
+                Write-Host "ReportGenerator not found in global tools" -ForegroundColor Yellow
             }
         }
         catch {
-            # Ignore errors
+            Write-Host "Error checking global tools: $($_.Exception.Message)" -ForegroundColor Red
         }
         
         if (!$reportGeneratorExists) {
             Write-Host "Installing ReportGenerator tool..." -ForegroundColor Yellow
-            dotnet tool install --global dotnet-reportgenerator-globaltool --ignore-failed-sources
+            $installOutput = dotnet tool install --global dotnet-reportgenerator-globaltool --ignore-failed-sources 2>&1
+            Write-Host "Install output: $installOutput" -ForegroundColor Gray
+            
             if ($LASTEXITCODE -eq 0) { 
                 $reportGeneratorExists = $true 
                 Write-Host "ReportGenerator installed successfully" -ForegroundColor Green
+                
+                # Verify it's actually available
+                try {
+                    $testOutput = & dotnet reportgenerator --help 2>&1
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Host "ReportGenerator is working correctly" -ForegroundColor Green
+                    } else {
+                        Write-Host "ReportGenerator installed but not working: $testOutput" -ForegroundColor Red
+                        $reportGeneratorExists = $false
+                    }
+                } catch {
+                    Write-Host "ReportGenerator test failed: $($_.Exception.Message)" -ForegroundColor Red
+                    $reportGeneratorExists = $false
+                }
             } else {
-                Write-Host "Failed to install ReportGenerator" -ForegroundColor Red
+                Write-Host "Failed to install ReportGenerator, exit code: $LASTEXITCODE" -ForegroundColor Red
+                Write-Host "Install output: $installOutput" -ForegroundColor Red
             }
         }
         
         if ($reportGeneratorExists) {
+            Write-Host "Attempting to generate coverage report with ReportGenerator..." -ForegroundColor Blue
+            
             # Generate HTML coverage report
             $reportPaths = $coverageFiles | ForEach-Object { $_.FullName }
             $reportArgs = @(
@@ -231,22 +253,48 @@ if ($GenerateReports -and $GenerateCoverage) {
                 "-reporttypes:Html;Cobertura;JsonSummary;TextSummary"
             )
             
-            & dotnet reportgenerator $reportArgs
+            Write-Host "ReportGenerator arguments:" -ForegroundColor Gray
+            $reportArgs | ForEach-Object { Write-Host "  $_" -ForegroundColor Gray }
             
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host "Coverage reports generated successfully" -ForegroundColor Green
-                Write-Host "Coverage report location: $reportOutputPath\index.html" -ForegroundColor Cyan
+            # Verify all coverage files exist and are readable
+            Write-Host "Verifying coverage files before ReportGenerator:" -ForegroundColor Gray
+            foreach ($reportPath in $reportPaths) {
+                if (Test-Path $reportPath) {
+                    $fileSize = (Get-Item $reportPath).Length
+                    Write-Host "  OK: $reportPath ($fileSize bytes)" -ForegroundColor Gray
+                } else {
+                    Write-Host "  ERROR: $reportPath (file not found)" -ForegroundColor Red
+                }
             }
-            else {
-                Write-Host "Coverage report generation failed with exit code $LASTEXITCODE" -ForegroundColor Red
-                Write-Host "ReportGenerator arguments were: $($reportArgs -join ' ')" -ForegroundColor Yellow
+            
+            try {
+                $reportOutput = & dotnet reportgenerator $reportArgs 2>&1
+                
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Host "ReportGenerator completed successfully" -ForegroundColor Green
+                    if (Test-Path (Join-Path $reportOutputPath "index.html")) {
+                        Write-Host "SUCCESS: ReportGenerator created detailed coverage report!" -ForegroundColor Green
+                        Write-Host "Coverage report location: $reportOutputPath\index.html" -ForegroundColor Cyan
+                    } else {
+                        Write-Host "WARNING: ReportGenerator completed but index.html not found - falling back to simple report" -ForegroundColor Yellow
+                        Write-Host "ReportGenerator output: $reportOutput" -ForegroundColor Yellow
+                        $reportGeneratorExists = $false  # Fall back to simple report
+                    }
+                }
+                else {
+                    Write-Host "ReportGenerator failed with exit code $LASTEXITCODE" -ForegroundColor Red
+                    Write-Host "ReportGenerator output: $reportOutput" -ForegroundColor Red
+                    $reportGeneratorExists = $false  # Fall back to simple report
+                }
+            } catch {
+                Write-Host "ReportGenerator execution failed: $($_.Exception.Message)" -ForegroundColor Red
                 $reportGeneratorExists = $false  # Fall back to simple report
             }
         }
         
         if (!$reportGeneratorExists) {
-            # Create a simple coverage report without ReportGenerator
-            Write-Host "Creating simple coverage report without ReportGenerator..." -ForegroundColor Yellow
+            # Create a simple coverage report as fallback
+            Write-Host "ReportGenerator not available - creating simple coverage report as fallback..." -ForegroundColor Yellow
             New-Item -ItemType Directory -Path $reportOutputPath -Force | Out-Null
             
             # Parse coverage data from XML files
@@ -254,7 +302,6 @@ if ($GenerateReports -and $GenerateCoverage) {
             $totalLinesValid = 0
             $totalBranchesCovered = 0
             $totalBranchesValid = 0
-            $packageData = @()
             
             foreach ($file in $coverageFiles) {
                 try {
@@ -263,16 +310,6 @@ if ($GenerateReports -and $GenerateCoverage) {
                     if ($content -match 'lines-valid="(\d+)"') { $totalLinesValid += [int]$matches[1] }
                     if ($content -match 'branches-covered="(\d+)"') { $totalBranchesCovered += [int]$matches[1] }
                     if ($content -match 'branches-valid="(\d+)"') { $totalBranchesValid += [int]$matches[1] }
-                    
-                    # Extract package info
-                    if ($content -match '<packages>(.*?)</packages>' -and $matches[1] -notmatch '^\s*$') {
-                        $packageXml = $matches[1]
-                        if ($packageXml -match '<package name="([^"]*)"[^>]*line-rate="([^"]*)"') {
-                            $packageName = $matches[1]
-                            $lineRate = [math]::Round([double]$matches[2] * 100, 1)
-                            $packageData += @{ name = $packageName; coverage = $lineRate }
-                        }
-                    }
                 } catch {
                     Write-Host "  Warning: Could not parse $($file.FullName)" -ForegroundColor Yellow
                 }
@@ -282,103 +319,37 @@ if ($GenerateReports -and $GenerateCoverage) {
             $branchRate = if ($totalBranchesValid -gt 0) { [math]::Round($totalBranchesCovered / $totalBranchesValid * 100, 1) } else { 0 }
             
             # Create simple HTML report
-            $simpleHtml = @"
+            $htmlTemplate = @'
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Code Coverage Report</title>
-    <meta charset="utf-8">
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 20px; background: #f6f8fa; }
-        .container { max-width: 1200px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .header { background: #24292e; color: white; padding: 20px; }
-        .header h1 { margin: 0; font-size: 24px; }
-        .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; padding: 20px; }
-        .metric { text-align: center; padding: 15px; background: #f6f8fa; border-radius: 6px; }
-        .metric-value { font-size: 36px; font-weight: bold; margin-bottom: 5px; }
-        .metric-label { color: #586069; font-size: 14px; }
-        .packages { margin: 20px; }
-        .package { padding: 10px; margin: 5px 0; background: #f6f8fa; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; }
-        .coverage-bar { width: 100px; height: 8px; background: #e1e4e8; border-radius: 4px; overflow: hidden; }
-        .coverage-fill { height: 100%; background: #28a745; border-radius: 4px; }
-        .low { background: #dc3545 !important; }
-        .medium { background: #ffc107 !important; }
-        .high { background: #28a745 !important; }
-        .timestamp { text-align: center; padding: 20px; color: #586069; border-top: 1px solid #e1e4e8; }
-    </style>
+    <title>Coverage Report</title>
+    <style>body{font-family:Arial,sans-serif;padding:20px;}</style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>📊 Code Coverage Report</h1>
-            <p>SimpleTestsDemo Coverage Analysis</p>
-        </div>
-        
-        <div class="summary">
-            <div class="metric">
-                <div class="metric-value $(if ($lineRate -ge 80) { 'high' } elseif ($lineRate -ge 60) { 'medium' } else { 'low' })">$lineRate%</div>
-                <div class="metric-label">Line Coverage</div>
-            </div>
-            <div class="metric">
-                <div class="metric-value $(if ($branchRate -ge 80) { 'high' } elseif ($branchRate -ge 60) { 'medium' } else { 'low' })">$branchRate%</div>
-                <div class="metric-label">Branch Coverage</div>
-            </div>
-            <div class="metric">
-                <div class="metric-value">$totalLinesCovered</div>
-                <div class="metric-label">Lines Covered</div>
-            </div>
-            <div class="metric">
-                <div class="metric-value">$totalLinesValid</div>
-                <div class="metric-label">Total Lines</div>
-            </div>
-        </div>
-"@
-            
-            if ($packageData.Count -gt 0) {
-                $simpleHtml += @"
-        
-        <div class="packages">
-            <h2>📦 Package Coverage</h2>
-"@
-                foreach ($pkg in $packageData) {
-                    $fillWidth = [math]::Min(100, $pkg.coverage)
-                    $colorClass = if ($pkg.coverage -ge 80) { "high" } elseif ($pkg.coverage -ge 60) { "medium" } else { "low" }
-                    $simpleHtml += @"
-            <div class="package">
-                <div>
-                    <strong>$($pkg.name)</strong>
-                </div>
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <span>$($pkg.coverage)%</span>
-                    <div class="coverage-bar">
-                        <div class="coverage-fill $colorClass" style="width: $fillWidth%"></div>
-                    </div>
-                </div>
-            </div>
-"@
-                }
-                $simpleHtml += "        </div>"
-            }
-            
-            $simpleHtml += @"
-        
-        <div class="timestamp">
-            Generated on $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC') | 
-            Coverage files: $($coverageFiles.Count) | 
-            SimpleTestsDemo v1.0
-        </div>
-    </div>
+    <h1>Code Coverage Report</h1>
+    <p><strong>Line Coverage:</strong> {lineRate}% ({linesCovered}/{linesTotal})</p>
+    <p><strong>Branch Coverage:</strong> {branchRate}% ({branchesCovered}/{branchesTotal})</p>
+    <p><em>Generated: {timestamp}</em></p>
+    <p><small>Note: This is a simplified fallback report. ReportGenerator provides detailed coverage analysis.</small></p>
 </body>
 </html>
-"@
+'@
+            
+            $htmlContent = $htmlTemplate -replace '\{lineRate\}', $lineRate
+            $htmlContent = $htmlContent -replace '\{linesCovered\}', $totalLinesCovered
+            $htmlContent = $htmlContent -replace '\{linesTotal\}', $totalLinesValid
+            $htmlContent = $htmlContent -replace '\{branchRate\}', $branchRate
+            $htmlContent = $htmlContent -replace '\{branchesCovered\}', $totalBranchesCovered
+            $htmlContent = $htmlContent -replace '\{branchesTotal\}', $totalBranchesValid
+            $htmlContent = $htmlContent -replace '\{timestamp\}', (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
             
             $simplePath = Join-Path $reportOutputPath "index.html"
-            $simpleHtml | Out-File -FilePath $simplePath -Encoding UTF8
+            $htmlContent | Out-File -FilePath $simplePath -Encoding UTF8
             Write-Host "Simple coverage report created at: $simplePath" -ForegroundColor Green
             
             # Also create the Cobertura.xml for the summary action
             if ($coverageFiles.Count -gt 0) {
-                # Merge all coverage files into one or just copy the first comprehensive one
                 $sourceXml = $coverageFiles[0].FullName
                 $targetXml = Join-Path $reportOutputPath "Cobertura.xml"
                 Copy-Item $sourceXml $targetXml
