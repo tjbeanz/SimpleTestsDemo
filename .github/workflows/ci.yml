@@ -31,174 +31,64 @@ jobs:
     - name: Build
       run: dotnet build --no-restore --configuration Release
       
-    - name: Test
+    - name: Run Tests with PowerShell Script
+      shell: pwsh
       run: |
-        # Create test results directory
-        mkdir -p TestResults
+        # Make the script executable and run it with coverage
+        ./run-tests-simple.ps1 -Configuration Release -GenerateCoverage -GenerateReports
         
-        # Run Unit Tests with coverage
-        dotnet test SimpleTestsDemo.UnitTests \
-          --configuration Release \
-          --no-build \
-          --logger "trx;LogFileName=UnitTests.trx" \
-          --logger "html;LogFileName=UnitTests.html" \
-          --results-directory TestResults/UnitTests \
-          --collect:"XPlat Code Coverage" \
-          --settings coverlet.runsettings
-          
-        # Run Integration Tests with coverage  
-        dotnet test SimpleTestsDemo.IntegrationTests \
-          --configuration Release \
-          --no-build \
-          --logger "trx;LogFileName=IntegrationTests.trx" \
-          --logger "html;LogFileName=IntegrationTests.html" \
-          --results-directory TestResults/IntegrationTests \
-          --collect:"XPlat Code Coverage" \
-          --settings coverlet.runsettings
-          
-        # Run Contract Tests (only our working SimpleApiContractTests) with coverage
-        dotnet test SimpleTestsDemo.ContractTests \
-          --configuration Release \
-          --no-build \
-          --filter "SimpleApiContractTests" \
-          --logger "trx;LogFileName=ContractTests.trx" \
-          --logger "html;LogFileName=ContractTests.html" \
-          --results-directory TestResults/ContractTests \
-          --collect:"XPlat Code Coverage" \
-          --settings coverlet.runsettings
-        
-        # Debug: Show what was created
-        echo "Test results structure:"
-        find TestResults -type f -name "*.xml" -o -name "*.trx" -o -name "*.html" | sort
-    
-    - name: Install ReportGenerator
-      run: dotnet tool install -g dotnet-reportgenerator-globaltool
-      
-    - name: Generate Coverage Report
+    - name: Debug Coverage Files
+      shell: pwsh
       run: |
-        # Debug: List coverage files with detailed info
-        echo "Looking for coverage files..."
-        find TestResults -name "*.cobertura.xml" -type f -exec echo "Found: {}" \; -exec head -5 {} \; || echo "No cobertura files found"
-        
-        # Check if any coverage files exist and have actual data
-        coverage_files=$(find TestResults -name "coverage.cobertura.xml" -type f)
-        if [ -n "$coverage_files" ]; then
-          # Check if any file has actual package data
-          has_data=false
-          for file in $coverage_files; do
-            if grep -q "<package " "$file"; then
-              has_data=true
-              echo "Coverage data found in: $file"
-              break
-            fi
-          done
-          
-          if [ "$has_data" = true ]; then
-            echo "Generating coverage report with ReportGenerator..."
-            reportgenerator \
-              -reports:"TestResults/**/coverage.cobertura.xml" \
-              -targetdir:"TestResults/CoverageReport" \
-              -reporttypes:"Html;Cobertura;JsonSummary;TextSummary" || echo "ReportGenerator completed with warnings"
-          else
-            echo "Coverage files exist but contain no data, creating placeholder report..."
-            mkdir -p TestResults/CoverageReport
-            cat > TestResults/CoverageReport/Cobertura.xml << 'EOF'
-        <?xml version="1.0" encoding="utf-8"?>
-        <coverage line-rate="0" branch-rate="0" version="1.9" timestamp="1691769600" lines-covered="0" lines-valid="1" branches-covered="0" branches-valid="1">
-          <sources><source>.</source></sources>
-          <packages>
-            <package name="SimpleTestsDemo" line-rate="0" branch-rate="0">
-              <classes>
-                <class name="EmptyClass" filename="Empty.cs" line-rate="0" branch-rate="0">
-                  <methods><method name="EmptyMethod" signature="()" line-rate="0" branch-rate="0">
-                    <lines><line number="1" hits="0" branch="false"/></lines></method></methods>
-                  <lines><line number="1" hits="0" branch="false"/></lines>
-                </class>
-              </classes>
-            </package>
-          </packages>
-        </coverage>
-        EOF
-            cat > TestResults/CoverageReport/index.html << 'EOF'
-        <!DOCTYPE html>
-        <html><head><title>Coverage Report</title></head>
-        <body><h1>No Coverage Data Available</h1>
-        <p>Coverage collection succeeded but no assemblies were covered.</p>
-        <p>This usually indicates that tests are using mocks without exercising the actual code.</p></body></html>
-        EOF
-          fi
-        else
-          echo "No coverage files found, creating empty report..."
-          mkdir -p TestResults/CoverageReport
-          cat > TestResults/CoverageReport/index.html << 'EOF'
-        <!DOCTYPE html>
-        <html><head><title>Coverage Report</title></head>
-        <body><h1>Coverage Collection Failed</h1>
-        <p>No coverage files were generated during test execution.</p></body></html>
-        EOF
-        fi
-        
-        # Always create a summary for the workflow
-        echo "Coverage report generation completed"
-    
-    - name: Generate Test Summary
-      run: |
-        # Create a comprehensive test summary
-        cat > TestResults/test-summary.json << 'EOF'
-        {
-          "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-          "testResults": {
-            "unitTests": {
-              "project": "SimpleTestsDemo.UnitTests",
-              "passed": $(grep -o 'passed="[0-9]*"' TestResults/UnitTests/*.trx | grep -o '[0-9]*' || echo 0),
-              "failed": $(grep -o 'failed="[0-9]*"' TestResults/UnitTests/*.trx | grep -o '[0-9]*' || echo 0),
-              "total": $(grep -o 'total="[0-9]*"' TestResults/UnitTests/*.trx | grep -o '[0-9]*' || echo 0)
-            },
-            "integrationTests": {
-              "project": "SimpleTestsDemo.IntegrationTests", 
-              "passed": $(grep -o 'passed="[0-9]*"' TestResults/IntegrationTests/*.trx | grep -o '[0-9]*' || echo 0),
-              "failed": $(grep -o 'failed="[0-9]*"' TestResults/IntegrationTests/*.trx | grep -o '[0-9]*' || echo 0),
-              "total": $(grep -o 'total="[0-9]*"' TestResults/IntegrationTests/*.trx | grep -o '[0-9]*' || echo 0)
-            },
-            "contractTests": {
-              "project": "SimpleTestsDemo.ContractTests",
-              "passed": $(grep -o 'passed="[0-9]*"' TestResults/ContractTests/*.trx | grep -o '[0-9]*' || echo 0),
-              "failed": $(grep -o 'failed="[0-9]*"' TestResults/ContractTests/*.trx | grep -o '[0-9]*' || echo 0),
-              "total": $(grep -o 'total="[0-9]*"' TestResults/ContractTests/*.trx | grep -o '[0-9]*' || echo 0)
-            }
+        Write-Host "Checking for coverage files..."
+        Get-ChildItem -Path "TestResults" -Recurse -Filter "coverage.cobertura.xml" | ForEach-Object { 
+          Write-Host "Found: $($_.FullName)"
+          $content = Get-Content $_.FullName -Raw
+          if ($content -match 'lines-covered="([0-9]+)"') {
+            Write-Host "  Lines covered: $($matches[1])"
+          } else {
+            Write-Host "  No coverage data found"
           }
         }
-        EOF
+        
+        if (Test-Path "TestResults/CoverageReport/Cobertura.xml") {
+          Write-Host "Final Cobertura.xml exists"
+          $content = Get-Content "TestResults/CoverageReport/Cobertura.xml" -Raw
+          if ($content -match 'lines-covered="([0-9]+)"') {
+            Write-Host "Final report has $($matches[1]) lines covered"
+          }
+        } else {
+          Write-Host "Final Cobertura.xml not found"
+        }
+    
+    - name: Validate Coverage Report
+      shell: pwsh
+      run: |
+        if (Test-Path "TestResults/CoverageReport/Cobertura.xml") {
+          Write-Host "Coverage file exists, checking content..."
+          $content = Get-Content "TestResults/CoverageReport/Cobertura.xml" -Raw
+          if ($content -match '<package ') {
+            Write-Host "Coverage file contains package data - proceeding with summary"
+            echo "HAS_COVERAGE_DATA=true" >> $env:GITHUB_ENV
+          } else {
+            Write-Host "Coverage file exists but contains no package data"
+            echo "HAS_COVERAGE_DATA=false" >> $env:GITHUB_ENV
+          }
+        } else {
+          Write-Host "No coverage file found"
+          echo "HAS_COVERAGE_DATA=false" >> $env:GITHUB_ENV
+        }
     
     - name: Publish Test Results
       uses: dorny/test-reporter@v1
-      if: success() || failure()    # run this step even if previous steps failed
+      if: success() || failure()
       with:
-        name: Test Results
+        name: 'Test Results'
         path: 'TestResults/**/*.trx'
         reporter: dotnet-trx
         fail-on-error: false
-        only-summary: false
-        max-annotations: 50
         
-    - name: Validate Coverage File
-      run: |
-        if [ -f "TestResults/CoverageReport/Cobertura.xml" ]; then
-          echo "Coverage file exists, checking content..."
-          # Check if file has actual package data
-          if grep -q "<package " TestResults/CoverageReport/Cobertura.xml; then
-            echo "Coverage file contains package data - proceeding with summary"
-            echo "HAS_COVERAGE_DATA=true" >> $GITHUB_ENV
-          else
-            echo "Coverage file exists but contains no package data"
-            echo "HAS_COVERAGE_DATA=false" >> $GITHUB_ENV
-          fi
-        else
-          echo "No coverage file found"
-          echo "HAS_COVERAGE_DATA=false" >> $GITHUB_ENV
-        fi
-    
-    - name: Code Coverage Summary Report
+    - name: Code Coverage Summary
       uses: irongut/CodeCoverageSummary@v1.3.0
       if: env.HAS_COVERAGE_DATA == 'true'
       with:
@@ -211,44 +101,39 @@ jobs:
         indicators: true
         output: both
         thresholds: '60 80'
+      continue-on-error: true
         
     - name: Create Coverage Summary Fallback
       if: env.HAS_COVERAGE_DATA == 'false'
+      shell: pwsh
       run: |
-        echo "## 📊 Code Coverage Summary" > code-coverage-results.md
-        echo "" >> code-coverage-results.md
-        echo "⚠️ No coverage data available for this run." >> code-coverage-results.md
-        echo "" >> code-coverage-results.md
-        echo "**Possible reasons:**" >> code-coverage-results.md
-        echo "- Tests were skipped or failed to run" >> code-coverage-results.md
-        echo "- Coverage collection is not properly configured" >> code-coverage-results.md
-        echo "- Build configuration excludes test projects" >> code-coverage-results.md
-        echo "" >> code-coverage-results.md
-        echo "📋 **Test Status:** Check the test results above for more details." >> code-coverage-results.md
+        @"
+        ## 📊 Code Coverage Summary
         
-    - name: Add Coverage PR Comment
+        ⚠️ No coverage data available for this run.
+        
+        **Possible reasons:**
+        - Tests were skipped or failed to run
+        - Coverage collection is not properly configured
+        - Build configuration excludes test projects
+        
+        📋 **Test Status:** Check the test results above for more details.
+        "@ | Out-File -FilePath "code-coverage-results.md" -Encoding UTF8
+        
+    - name: Comment Test Results on PR
       uses: marocchino/sticky-pull-request-comment@v2
       if: github.event_name == 'pull_request'
       with:
         recreate: true
         path: code-coverage-results.md
         
-    - name: Upload Test Results
+    - name: Upload All Test Reports
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: test-results
+        name: test-reports-${{ github.run_number }}
         path: |
           TestResults/
-          !TestResults/**/TestResults/
-        retention-days: 30
-        
-    - name: Upload Coverage Reports
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: coverage-reports
-        path: TestResults/CoverageReport/
         retention-days: 30
 
   # Deploy coverage reports to GitHub Pages
@@ -269,17 +154,11 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
       
     steps:
-    - name: Download coverage reports
+    - name: Download test reports
       uses: actions/download-artifact@v4
       with:
-        name: coverage-reports
-        path: coverage-reports
-        
-    - name: Download test results  
-      uses: actions/download-artifact@v4
-      with:
-        name: test-results
-        path: test-results
+        name: test-reports-${{ github.run_number }}
+        path: test-reports
         
     - name: Create Pages Index
       run: |
@@ -314,25 +193,25 @@ jobs:
                     <div class="report-card">
                         <h3>📊 Code Coverage</h3>
                         <p>Comprehensive code coverage analysis across all projects</p>
-                        <a href="coverage-reports/index.html" class="report-link">View Coverage Report</a>
+                        <a href="CoverageReport/index.html" class="report-link">View Coverage Report</a>
                     </div>
                     
                     <div class="report-card">
                         <h3>🧪 Unit Tests</h3>
                         <p>Fast, isolated unit tests with mocked dependencies</p>
-                        <a href="test-results/UnitTests/UnitTests.html" class="report-link">View Unit Test Report</a>
+                        <a href="UnitTests/UnitTests.html" class="report-link">View Unit Test Report</a>
                     </div>
                     
                     <div class="report-card">
                         <h3>🔗 Integration Tests</h3>
                         <p>End-to-end API tests with real HTTP requests</p>
-                        <a href="test-results/IntegrationTests/IntegrationTests.html" class="report-link">View Integration Test Report</a>
+                        <a href="IntegrationTests/IntegrationTests.html" class="report-link">View Integration Test Report</a>
                     </div>
                     
                     <div class="report-card">
                         <h3>📋 Contract Tests</h3>
                         <p>API contract validation and structure verification</p>
-                        <a href="test-results/ContractTests/ContractTests.html" class="report-link">View Contract Test Report</a>
+                        <a href="ContractTests/ContractTests.html" class="report-link">View Contract Test Report</a>
                     </div>
                 </div>
                 
@@ -345,9 +224,8 @@ jobs:
         </html>
         EOF
         
-        # Copy reports to pages directory
-        cp -r coverage-reports pages/coverage-reports
-        cp -r test-results pages/test-results
+        # Copy reports to pages directory (they're all in test-reports now)
+        cp -r test-reports/* pages/
         
     - name: Setup Pages
       uses: actions/configure-pages@v4

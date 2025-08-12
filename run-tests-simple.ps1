@@ -198,12 +198,12 @@ if ($GenerateReports -and $GenerateCoverage) {
         
         if ($reportGeneratorExists) {
             # Generate HTML coverage report
-            $reportArgs = @()
-            foreach ($file in $coverageFiles) {
-                $reportArgs += "-reports:$($file.FullName)"
-            }
-            $reportArgs += "-targetdir:$reportOutputPath"
-            $reportArgs += "-reporttypes:Html;Cobertura;JsonSummary;TextSummary"
+            $reportPaths = $coverageFiles | ForEach-Object { $_.FullName }
+            $reportArgs = @(
+                "-reports:$($reportPaths -join ';')"
+                "-targetdir:$reportOutputPath"
+                "-reporttypes:Html;Cobertura;JsonSummary;TextSummary"
+            )
             
             & dotnet reportgenerator $reportArgs 2>$null
             
@@ -239,7 +239,7 @@ if ($GenerateReports) {
         }
         artifacts = @{
             outputDirectory = $outputPath
-            coverageReport = if (Test-Path (Join-Path $outputPath "CoverageReport\index.html")) { Join-Path $outputPath "CoverageReport\index.html" } else { $null }
+            coverageReport = if (Test-Path (Join-Path $outputPath (Join-Path "CoverageReport" "index.html"))) { Join-Path $outputPath (Join-Path "CoverageReport" "index.html") } else { $null }
         }
     }
     
@@ -307,7 +307,7 @@ if ($OpenResults) {
     Write-Host "Opening test reports..." -ForegroundColor Blue
     
     # Open coverage report
-    $coverageReportPath = Join-Path $outputPath "CoverageReport\index.html"
+    $coverageReportPath = Join-Path $outputPath (Join-Path "CoverageReport" "index.html")
     if (Test-Path $coverageReportPath) {
         Write-Host "Opening coverage report..." -ForegroundColor Cyan
         Start-Process $coverageReportPath
@@ -321,7 +321,7 @@ if ($OpenResults) {
     
     # Unit Tests HTML report
     if (!$SkipUnitTests) {
-        $unitTestHtml = Join-Path $outputPath "UnitTests\UnitTests.html"
+        $unitTestHtml = Join-Path $outputPath (Join-Path "UnitTests" "UnitTests.html")
         if (Test-Path $unitTestHtml) {
             $testHtmlReports += $unitTestHtml
         }
@@ -329,7 +329,7 @@ if ($OpenResults) {
     
     # Integration Tests HTML report
     if (!$SkipIntegrationTests) {
-        $integrationTestHtml = Join-Path $outputPath "IntegrationTests\IntegrationTests.html"
+        $integrationTestHtml = Join-Path $outputPath (Join-Path "IntegrationTests" "IntegrationTests.html")
         if (Test-Path $integrationTestHtml) {
             $testHtmlReports += $integrationTestHtml
         }
@@ -337,7 +337,7 @@ if ($OpenResults) {
     
     # Contract Tests HTML report
     if (!$SkipContractTests) {
-        $contractTestHtml = Join-Path $outputPath "ContractTests\ContractTests.html"
+        $contractTestHtml = Join-Path $outputPath (Join-Path "ContractTests" "ContractTests.html")
         if (Test-Path $contractTestHtml) {
             $testHtmlReports += $contractTestHtml
         }
