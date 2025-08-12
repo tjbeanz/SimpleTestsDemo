@@ -5,10 +5,12 @@
       <DataCollector friendlyName="XPlat code coverage">
         <Configuration>
           <Format>cobertura</Format>
-          <!-- Exclude test assemblies -->
-          <Exclude>[*Tests*]*</Exclude>
-          <!-- Exclude framework and third-party libraries -->
-          <ExcludeByFile>**/Program.cs</ExcludeByFile>
+          <!-- Include specific assemblies we want to measure -->
+          <Include>[SimpleTestsDemo.Core]*,[SimpleTestsDemo.Api]*</Include>
+          <!-- Exclude test assemblies and generated files -->
+          <Exclude>[*Tests]*,[*.Tests]*</Exclude>
+          <!-- Don't exclude Program.cs as it's part of our API -->
+          <!-- <ExcludeByFile>**/Program.cs</ExcludeByFile> -->
         </Configuration>
       </DataCollector>
     </DataCollectors>

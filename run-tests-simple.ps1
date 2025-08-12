@@ -153,12 +153,22 @@ if ($GenerateReports -and $GenerateCoverage) {
     $allCoverageFiles = Get-ChildItem -Path $outputPath -Recurse -Filter "coverage.cobertura.xml" -ErrorAction SilentlyContinue
     $coverageFiles = @()
     
+    Write-Host "Found $($allCoverageFiles.Count) coverage XML files to examine:" -ForegroundColor Yellow
+    foreach ($file in $allCoverageFiles) {
+        Write-Host "  - $($file.FullName)" -ForegroundColor Gray
+    }
+    Write-Host "" -ForegroundColor Yellow
+    
     foreach ($file in $allCoverageFiles) {
         try {
             $content = Get-Content $file.FullName -Raw
-            # Check if the file has actual coverage data (not empty packages)
-            if ($content -match '<packages>\s*<package' -or $content -match 'lines-covered="[1-9]') {
+            # Check if the file is a valid Cobertura XML file with coverage data
+            # Accept files even with 0 coverage as that's still valid data
+            if ($content -match '<coverage ' -and ($content -match '<packages>' -or $content -match 'lines-covered="\d+"')) {
                 $coverageFiles += $file
+                Write-Host "  Found valid coverage file: $($file.FullName)" -ForegroundColor Gray
+            } else {
+                Write-Host "  Skipped invalid coverage file: $($file.FullName)" -ForegroundColor Yellow
             }
         }
         catch {
