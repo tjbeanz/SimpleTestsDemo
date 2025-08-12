@@ -140,7 +140,7 @@ jobs:
   deploy-reports:
     needs: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push' && needs.test.result == 'success'
     
     # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
     permissions:
@@ -159,6 +159,20 @@ jobs:
       with:
         name: test-reports-${{ github.run_number }}
         path: test-reports
+      continue-on-error: false
+        
+    - name: Debug artifact structure
+      run: |
+        echo "=== Artifact structure ==="
+        find test-reports -type f -name "*.html" -o -name "index.html" | head -20 || echo "No HTML files found"
+        echo "=== Looking for coverage report ==="
+        find test-reports -path "*/CoverageReport/index.html" -o -name "index.html" | grep -i coverage || echo "No coverage index.html found"
+        echo "=== All files in test-reports ==="
+        ls -la test-reports/ || echo "test-reports directory not found"
+        echo "=== TestResults structure if it exists ==="
+        if [ -d "test-reports/TestResults" ]; then
+          find test-reports/TestResults -name "*.html" | head -10
+        fi
         
     - name: Create Pages Index
       run: |
@@ -224,8 +238,18 @@ jobs:
         </html>
         EOF
         
-        # Copy reports to pages directory (they're all in test-reports now)
-        cp -r test-reports/* pages/
+        # Copy reports to pages directory - handle nested TestResults structure
+        if [ -d "test-reports/TestResults" ]; then
+          echo "Found TestResults subdirectory, copying from there"
+          cp -r test-reports/TestResults/* pages/
+        else
+          echo "No TestResults subdirectory, copying directly"
+          cp -r test-reports/* pages/
+        fi
+        
+        # Verify the structure we created
+        echo "=== Final pages structure ==="
+        find pages -name "index.html" -o -name "*.html" | head -10
         
     - name: Setup Pages
       uses: actions/configure-pages@v4
