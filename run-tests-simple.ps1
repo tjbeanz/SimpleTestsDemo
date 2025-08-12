@@ -268,26 +268,63 @@ if ($GenerateReports -and $GenerateCoverage) {
             }
             
             try {
+                Write-Host "Executing ReportGenerator command..." -ForegroundColor Gray
                 $reportOutput = & dotnet reportgenerator $reportArgs 2>&1
+                Write-Host "ReportGenerator exit code: $LASTEXITCODE" -ForegroundColor Gray
                 
                 if ($LASTEXITCODE -eq 0) {
                     Write-Host "ReportGenerator completed successfully" -ForegroundColor Green
-                    if (Test-Path (Join-Path $reportOutputPath "index.html")) {
+                    
+                    # Check if index.html was created
+                    $indexPath = Join-Path $reportOutputPath "index.html"
+                    Write-Host "Checking for index.html at: $indexPath" -ForegroundColor Gray
+                    
+                    if (Test-Path $indexPath) {
+                        $indexSize = (Get-Item $indexPath).Length
                         Write-Host "SUCCESS: ReportGenerator created detailed coverage report!" -ForegroundColor Green
-                        Write-Host "Coverage report location: $reportOutputPath\index.html" -ForegroundColor Cyan
+                        Write-Host "Coverage report location: $indexPath ($indexSize bytes)" -ForegroundColor Cyan
+                        
+                        # List some of the generated files for verification
+                        $reportFiles = Get-ChildItem -Path $reportOutputPath -Filter "*.html" -ErrorAction SilentlyContinue
+                        if ($reportFiles.Count -gt 0) {
+                            Write-Host "Generated HTML files:" -ForegroundColor Green
+                            $reportFiles | ForEach-Object { Write-Host "  - $($_.Name)" -ForegroundColor Gray }
+                        }
                     } else {
                         Write-Host "WARNING: ReportGenerator completed but index.html not found - falling back to simple report" -ForegroundColor Yellow
+                        Write-Host "Output directory contents:" -ForegroundColor Yellow
+                        if (Test-Path $reportOutputPath) {
+                            Get-ChildItem -Path $reportOutputPath | ForEach-Object { Write-Host "  - $($_.Name)" -ForegroundColor Gray }
+                        } else {
+                            Write-Host "  Output directory does not exist" -ForegroundColor Red
+                        }
                         Write-Host "ReportGenerator output: $reportOutput" -ForegroundColor Yellow
                         $reportGeneratorExists = $false  # Fall back to simple report
                     }
                 }
                 else {
                     Write-Host "ReportGenerator failed with exit code $LASTEXITCODE" -ForegroundColor Red
-                    Write-Host "ReportGenerator output: $reportOutput" -ForegroundColor Red
+                    Write-Host "ReportGenerator output:" -ForegroundColor Red
+                    Write-Host "$reportOutput" -ForegroundColor Red
+                    
+                    # Additional debugging for failed execution
+                    Write-Host "Debugging ReportGenerator failure:" -ForegroundColor Red
+                    Write-Host "  - Target directory: $reportOutputPath" -ForegroundColor Gray
+                    Write-Host "  - Target directory exists: $(Test-Path $reportOutputPath)" -ForegroundColor Gray
+                    Write-Host "  - Number of input files: $($reportPaths.Count)" -ForegroundColor Gray
+                    Write-Host "  - ReportGenerator version check:" -ForegroundColor Gray
+                    try {
+                        $versionOutput = & dotnet reportgenerator --version 2>&1
+                        Write-Host "    Version: $versionOutput" -ForegroundColor Gray
+                    } catch {
+                        Write-Host "    Version check failed: $($_.Exception.Message)" -ForegroundColor Red
+                    }
+                    
                     $reportGeneratorExists = $false  # Fall back to simple report
                 }
             } catch {
-                Write-Host "ReportGenerator execution failed: $($_.Exception.Message)" -ForegroundColor Red
+                Write-Host "ReportGenerator execution failed with exception: $($_.Exception.Message)" -ForegroundColor Red
+                Write-Host "Exception details: $($_.Exception.ToString())" -ForegroundColor Red
                 $reportGeneratorExists = $false  # Fall back to simple report
             }
         }
