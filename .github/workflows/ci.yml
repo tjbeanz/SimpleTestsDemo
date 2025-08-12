@@ -238,14 +238,9 @@ jobs:
         </html>
         EOF
         
-        # Copy reports to pages directory - handle nested TestResults structure
-        if [ -d "test-reports/TestResults" ]; then
-          echo "Found TestResults subdirectory, copying from there"
-          cp -r test-reports/TestResults/* pages/
-        else
-          echo "No TestResults subdirectory, copying directly"
-          cp -r test-reports/* pages/
-        fi
+        # Copy reports to pages directory - we know the structure is flat
+        echo "Copying test reports to pages directory..."
+        cp -r test-reports/* pages/
         
         # Verify the structure we created
         echo "=== Final pages structure ==="
