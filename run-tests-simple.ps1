@@ -149,10 +149,30 @@ if (!$SkipContractTests) {
 if ($GenerateReports -and $GenerateCoverage) {
     Write-Host "Generating Coverage Reports..." -ForegroundColor Blue
     
-    # Find all coverage files
-    $coverageFiles = Get-ChildItem -Path $outputPath -Recurse -Filter "coverage.cobertura.xml" -ErrorAction SilentlyContinue
+    # Find all coverage files with actual data
+    $allCoverageFiles = Get-ChildItem -Path $outputPath -Recurse -Filter "coverage.cobertura.xml" -ErrorAction SilentlyContinue
+    $coverageFiles = @()
+    
+    foreach ($file in $allCoverageFiles) {
+        try {
+            $content = Get-Content $file.FullName -Raw
+            # Check if the file has actual coverage data (not empty packages)
+            if ($content -match '<packages>\s*<package' -or $content -match 'lines-covered="[1-9]') {
+                $coverageFiles += $file
+            }
+        }
+        catch {
+            # Ignore files we can't read
+        }
+    }
     
     if ($coverageFiles.Count -gt 0) {
+        Write-Host "Found $($coverageFiles.Count) coverage files with data:" -ForegroundColor Cyan
+        foreach ($file in $coverageFiles) {
+            Write-Host "  - $($file.FullName)" -ForegroundColor Gray
+        }
+        Write-Host ""
+        
         $reportOutputPath = Join-Path $outputPath "CoverageReport"
         
         # Check if ReportGenerator is available

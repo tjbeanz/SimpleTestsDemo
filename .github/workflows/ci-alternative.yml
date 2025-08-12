@@ -1,4 +1,4 @@
-name: Build and Test
+name: Build and Test (Alternative)
 
 on:
   push:
@@ -36,7 +36,7 @@ jobs:
         # Create test results directory
         mkdir -p TestResults
         
-        # Run Unit Tests with coverage
+        # Run Unit Tests
         dotnet test SimpleTestsDemo.UnitTests \
           --configuration Release \
           --no-build \
@@ -46,7 +46,7 @@ jobs:
           --collect:"XPlat Code Coverage" \
           --settings coverlet.runsettings
           
-        # Run Integration Tests with coverage  
+        # Run Integration Tests
         dotnet test SimpleTestsDemo.IntegrationTests \
           --configuration Release \
           --no-build \
@@ -56,7 +56,7 @@ jobs:
           --collect:"XPlat Code Coverage" \
           --settings coverlet.runsettings
           
-        # Run Contract Tests (only our working SimpleApiContractTests) with coverage
+        # Run Contract Tests (only our working SimpleApiContractTests)
         dotnet test SimpleTestsDemo.ContractTests \
           --configuration Release \
           --no-build \
@@ -66,141 +66,91 @@ jobs:
           --results-directory TestResults/ContractTests \
           --collect:"XPlat Code Coverage" \
           --settings coverlet.runsettings
-        
-        # Debug: Show what was created
-        echo "Test results structure:"
-        find TestResults -type f -name "*.xml" -o -name "*.trx" -o -name "*.html" | sort
     
     - name: Install ReportGenerator
       run: dotnet tool install -g dotnet-reportgenerator-globaltool
       
     - name: Generate Coverage Report
       run: |
-        # Debug: List coverage files with detailed info
-        echo "Looking for coverage files..."
-        find TestResults -name "*.cobertura.xml" -type f -exec echo "Found: {}" \; -exec head -5 {} \; || echo "No cobertura files found"
+        reportgenerator \
+          -reports:"TestResults/**/coverage.cobertura.xml" \
+          -targetdir:"TestResults/CoverageReport" \
+          -reporttypes:"Html;Cobertura;JsonSummary;TextSummary" \
+          -assemblyfilters:"+SimpleTestsDemo.Api;+SimpleTestsDemo.Core" \
+          -classfilters:"-*.Program"
+    
+    - name: Parse Test Results
+      id: test-results
+      run: |
+        # Parse test results from TRX files
+        echo "Parsing test results..."
         
-        # Check if any coverage files exist and have actual data
-        coverage_files=$(find TestResults -name "coverage.cobertura.xml" -type f)
-        if [ -n "$coverage_files" ]; then
-          # Check if any file has actual package data
-          has_data=false
-          for file in $coverage_files; do
-            if grep -q "<package " "$file"; then
-              has_data=true
-              echo "Coverage data found in: $file"
-              break
-            fi
-          done
-          
-          if [ "$has_data" = true ]; then
-            echo "Generating coverage report with ReportGenerator..."
-            reportgenerator \
-              -reports:"TestResults/**/coverage.cobertura.xml" \
-              -targetdir:"TestResults/CoverageReport" \
-              -reporttypes:"Html;Cobertura;JsonSummary;TextSummary" || echo "ReportGenerator completed with warnings"
-          else
-            echo "Coverage files exist but contain no data, creating placeholder report..."
-            mkdir -p TestResults/CoverageReport
-            cat > TestResults/CoverageReport/Cobertura.xml << 'EOF'
-        <?xml version="1.0" encoding="utf-8"?>
-        <coverage line-rate="0" branch-rate="0" version="1.9" timestamp="1691769600" lines-covered="0" lines-valid="1" branches-covered="0" branches-valid="1">
-          <sources><source>.</source></sources>
-          <packages>
-            <package name="SimpleTestsDemo" line-rate="0" branch-rate="0">
-              <classes>
-                <class name="EmptyClass" filename="Empty.cs" line-rate="0" branch-rate="0">
-                  <methods><method name="EmptyMethod" signature="()" line-rate="0" branch-rate="0">
-                    <lines><line number="1" hits="0" branch="false"/></lines></method></methods>
-                  <lines><line number="1" hits="0" branch="false"/></lines>
-                </class>
-              </classes>
-            </package>
-          </packages>
-        </coverage>
-        EOF
-            cat > TestResults/CoverageReport/index.html << 'EOF'
-        <!DOCTYPE html>
-        <html><head><title>Coverage Report</title></head>
-        <body><h1>No Coverage Data Available</h1>
-        <p>Coverage collection succeeded but no assemblies were covered.</p>
-        <p>This usually indicates that tests are using mocks without exercising the actual code.</p></body></html>
-        EOF
-          fi
+        # Count unit test results
+        UNIT_TOTAL=$(grep -o 'total="[0-9]*"' TestResults/UnitTests/*.trx | grep -o '[0-9]*' || echo 0)
+        UNIT_PASSED=$(grep -o 'passed="[0-9]*"' TestResults/UnitTests/*.trx | grep -o '[0-9]*' || echo 0)
+        UNIT_FAILED=$(grep -o 'failed="[0-9]*"' TestResults/UnitTests/*.trx | grep -o '[0-9]*' || echo 0)
+        
+        # Count integration test results
+        INT_TOTAL=$(grep -o 'total="[0-9]*"' TestResults/IntegrationTests/*.trx | grep -o '[0-9]*' || echo 0)
+        INT_PASSED=$(grep -o 'passed="[0-9]*"' TestResults/IntegrationTests/*.trx | grep -o '[0-9]*' || echo 0)
+        INT_FAILED=$(grep -o 'failed="[0-9]*"' TestResults/IntegrationTests/*.trx | grep -o '[0-9]*' || echo 0)
+        
+        # Count contract test results
+        CONTRACT_TOTAL=$(grep -o 'total="[0-9]*"' TestResults/ContractTests/*.trx | grep -o '[0-9]*' || echo 0)
+        CONTRACT_PASSED=$(grep -o 'passed="[0-9]*"' TestResults/ContractTests/*.trx | grep -o '[0-9]*' || echo 0)
+        CONTRACT_FAILED=$(grep -o 'failed="[0-9]*"' TestResults/ContractTests/*.trx | grep -o '[0-9]*' || echo 0)
+        
+        # Calculate totals
+        TOTAL_TESTS=$((UNIT_TOTAL + INT_TOTAL + CONTRACT_TOTAL))
+        TOTAL_PASSED=$((UNIT_PASSED + INT_PASSED + CONTRACT_PASSED))
+        TOTAL_FAILED=$((UNIT_FAILED + INT_FAILED + CONTRACT_FAILED))
+        
+        # Set outputs
+        echo "unit_total=$UNIT_TOTAL" >> $GITHUB_OUTPUT
+        echo "unit_passed=$UNIT_PASSED" >> $GITHUB_OUTPUT
+        echo "unit_failed=$UNIT_FAILED" >> $GITHUB_OUTPUT
+        echo "int_total=$INT_TOTAL" >> $GITHUB_OUTPUT
+        echo "int_passed=$INT_PASSED" >> $GITHUB_OUTPUT
+        echo "int_failed=$INT_FAILED" >> $GITHUB_OUTPUT
+        echo "contract_total=$CONTRACT_TOTAL" >> $GITHUB_OUTPUT
+        echo "contract_passed=$CONTRACT_PASSED" >> $GITHUB_OUTPUT
+        echo "contract_failed=$CONTRACT_FAILED" >> $GITHUB_OUTPUT
+        echo "total_tests=$TOTAL_TESTS" >> $GITHUB_OUTPUT
+        echo "total_passed=$TOTAL_PASSED" >> $GITHUB_OUTPUT
+        echo "total_failed=$TOTAL_FAILED" >> $GITHUB_OUTPUT
+        
+        # Create summary
+        echo "## 🧪 Test Results Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Test Type | Total | Passed | Failed |" >> $GITHUB_STEP_SUMMARY
+        echo "|-----------|-------|--------|--------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Unit Tests | $UNIT_TOTAL | $UNIT_PASSED | $UNIT_FAILED |" >> $GITHUB_STEP_SUMMARY
+        echo "| Integration Tests | $INT_TOTAL | $INT_PASSED | $INT_FAILED |" >> $GITHUB_STEP_SUMMARY
+        echo "| Contract Tests | $CONTRACT_TOTAL | $CONTRACT_PASSED | $CONTRACT_FAILED |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Total** | **$TOTAL_TESTS** | **$TOTAL_PASSED** | **$TOTAL_FAILED** |" >> $GITHUB_STEP_SUMMARY
+        
+        # Set exit code based on failures
+        if [ $TOTAL_FAILED -gt 0 ]; then
+          echo "❌ Tests failed: $TOTAL_FAILED out of $TOTAL_TESTS" >> $GITHUB_STEP_SUMMARY
+          exit 1
         else
-          echo "No coverage files found, creating empty report..."
-          mkdir -p TestResults/CoverageReport
-          cat > TestResults/CoverageReport/index.html << 'EOF'
-        <!DOCTYPE html>
-        <html><head><title>Coverage Report</title></head>
-        <body><h1>Coverage Collection Failed</h1>
-        <p>No coverage files were generated during test execution.</p></body></html>
-        EOF
+          echo "✅ All tests passed: $TOTAL_PASSED out of $TOTAL_TESTS" >> $GITHUB_STEP_SUMMARY
         fi
         
-        # Always create a summary for the workflow
-        echo "Coverage report generation completed"
-    
-    - name: Generate Test Summary
-      run: |
-        # Create a comprehensive test summary
-        cat > TestResults/test-summary.json << 'EOF'
-        {
-          "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-          "testResults": {
-            "unitTests": {
-              "project": "SimpleTestsDemo.UnitTests",
-              "passed": $(grep -o 'passed="[0-9]*"' TestResults/UnitTests/*.trx | grep -o '[0-9]*' || echo 0),
-              "failed": $(grep -o 'failed="[0-9]*"' TestResults/UnitTests/*.trx | grep -o '[0-9]*' || echo 0),
-              "total": $(grep -o 'total="[0-9]*"' TestResults/UnitTests/*.trx | grep -o '[0-9]*' || echo 0)
-            },
-            "integrationTests": {
-              "project": "SimpleTestsDemo.IntegrationTests", 
-              "passed": $(grep -o 'passed="[0-9]*"' TestResults/IntegrationTests/*.trx | grep -o '[0-9]*' || echo 0),
-              "failed": $(grep -o 'failed="[0-9]*"' TestResults/IntegrationTests/*.trx | grep -o '[0-9]*' || echo 0),
-              "total": $(grep -o 'total="[0-9]*"' TestResults/IntegrationTests/*.trx | grep -o '[0-9]*' || echo 0)
-            },
-            "contractTests": {
-              "project": "SimpleTestsDemo.ContractTests",
-              "passed": $(grep -o 'passed="[0-9]*"' TestResults/ContractTests/*.trx | grep -o '[0-9]*' || echo 0),
-              "failed": $(grep -o 'failed="[0-9]*"' TestResults/ContractTests/*.trx | grep -o '[0-9]*' || echo 0),
-              "total": $(grep -o 'total="[0-9]*"' TestResults/ContractTests/*.trx | grep -o '[0-9]*' || echo 0)
-            }
-          }
-        }
-        EOF
-    
-    - name: Publish Test Results
-      uses: dorny/test-reporter@v1
-      if: success() || failure()    # run this step even if previous steps failed
+    - name: Publish Test Results (Alternative)
+      uses: EnricoMi/publish-unit-test-result-action@v2
+      if: always()
       with:
-        name: Test Results
-        path: 'TestResults/**/*.trx'
-        reporter: dotnet-trx
-        fail-on-error: false
-        only-summary: false
-        max-annotations: 50
+        files: |
+          TestResults/**/*.trx
+        check_name: "Test Results"
+        comment_title: "Unit Test Results"
+        fail_on: "test failures"
+        action_fail: true
+        action_fail_on_inconclusive: true
         
-    - name: Validate Coverage File
-      run: |
-        if [ -f "TestResults/CoverageReport/Cobertura.xml" ]; then
-          echo "Coverage file exists, checking content..."
-          # Check if file has actual package data
-          if grep -q "<package " TestResults/CoverageReport/Cobertura.xml; then
-            echo "Coverage file contains package data - proceeding with summary"
-            echo "HAS_COVERAGE_DATA=true" >> $GITHUB_ENV
-          else
-            echo "Coverage file exists but contains no package data"
-            echo "HAS_COVERAGE_DATA=false" >> $GITHUB_ENV
-          fi
-        else
-          echo "No coverage file found"
-          echo "HAS_COVERAGE_DATA=false" >> $GITHUB_ENV
-        fi
-    
     - name: Code Coverage Summary Report
       uses: irongut/CodeCoverageSummary@v1.3.0
-      if: env.HAS_COVERAGE_DATA == 'true'
       with:
         filename: TestResults/CoverageReport/Cobertura.xml
         badge: true
@@ -211,20 +161,6 @@ jobs:
         indicators: true
         output: both
         thresholds: '60 80'
-        
-    - name: Create Coverage Summary Fallback
-      if: env.HAS_COVERAGE_DATA == 'false'
-      run: |
-        echo "## 📊 Code Coverage Summary" > code-coverage-results.md
-        echo "" >> code-coverage-results.md
-        echo "⚠️ No coverage data available for this run." >> code-coverage-results.md
-        echo "" >> code-coverage-results.md
-        echo "**Possible reasons:**" >> code-coverage-results.md
-        echo "- Tests were skipped or failed to run" >> code-coverage-results.md
-        echo "- Coverage collection is not properly configured" >> code-coverage-results.md
-        echo "- Build configuration excludes test projects" >> code-coverage-results.md
-        echo "" >> code-coverage-results.md
-        echo "📋 **Test Status:** Check the test results above for more details." >> code-coverage-results.md
         
     - name: Add Coverage PR Comment
       uses: marocchino/sticky-pull-request-comment@v2

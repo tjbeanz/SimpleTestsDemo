@@ -5,9 +5,10 @@
       <DataCollector friendlyName="XPlat code coverage">
         <Configuration>
           <Format>cobertura</Format>
-          <Exclude>[*Test*]*,[*Tests*]*</Exclude>
-          <ExcludeByFile>**/bin/**/*,**/obj/**/*</ExcludeByFile>
-          <IncludeDirectory>../</IncludeDirectory>
+          <!-- Exclude test assemblies -->
+          <Exclude>[*Tests*]*</Exclude>
+          <!-- Exclude framework and third-party libraries -->
+          <ExcludeByFile>**/Program.cs</ExcludeByFile>
         </Configuration>
       </DataCollector>
     </DataCollectors>
