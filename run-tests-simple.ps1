@@ -268,6 +268,8 @@ if ($GenerateReports -and $GenerateCoverage) {
             }
             
             try {
+                Write-Host "Dotnet tool restore..." -ForegroundColor Gray
+                dotnet tool restore
                 Write-Host "Executing ReportGenerator command..." -ForegroundColor Gray
                 $reportOutput = & dotnet reportgenerator $reportArgs 2>&1
                 Write-Host "ReportGenerator exit code: $LASTEXITCODE" -ForegroundColor Gray
