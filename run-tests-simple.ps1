@@ -293,7 +293,7 @@ if ($GenerateReports -and $GenerateCoverage) {
                             $reportFiles | ForEach-Object { Write-Host "  - $($_.Name)" -ForegroundColor Gray }
                         }
                     } else {
-                        Write-Host "WARNING: ReportGenerator completed but index.html not found - falling back to simple report" -ForegroundColor Yellow
+                        Write-Host "WARNING: ReportGenerator completed but index.html not found" -ForegroundColor Yellow
                         Write-Host "Output directory contents:" -ForegroundColor Yellow
                         if (Test-Path $reportOutputPath) {
                             Get-ChildItem -Path $reportOutputPath | ForEach-Object { Write-Host "  - $($_.Name)" -ForegroundColor Gray }
@@ -301,7 +301,6 @@ if ($GenerateReports -and $GenerateCoverage) {
                             Write-Host "  Output directory does not exist" -ForegroundColor Red
                         }
                         Write-Host "ReportGenerator output: $reportOutput" -ForegroundColor Yellow
-                        $reportGeneratorExists = $false  # Fall back to simple report
                     }
                 }
                 else {
@@ -321,78 +320,10 @@ if ($GenerateReports -and $GenerateCoverage) {
                     } catch {
                         Write-Host "    Version check failed: $($_.Exception.Message)" -ForegroundColor Red
                     }
-                    
-                    $reportGeneratorExists = $false  # Fall back to simple report
                 }
             } catch {
                 Write-Host "ReportGenerator execution failed with exception: $($_.Exception.Message)" -ForegroundColor Red
                 Write-Host "Exception details: $($_.Exception.ToString())" -ForegroundColor Red
-                $reportGeneratorExists = $false  # Fall back to simple report
-            }
-        }
-        
-        if (!$reportGeneratorExists) {
-            # Create a simple coverage report as fallback
-            Write-Host "ReportGenerator not available - creating simple coverage report as fallback..." -ForegroundColor Yellow
-            New-Item -ItemType Directory -Path $reportOutputPath -Force | Out-Null
-            
-            # Parse coverage data from XML files
-            $totalLinesCovered = 0
-            $totalLinesValid = 0
-            $totalBranchesCovered = 0
-            $totalBranchesValid = 0
-            
-            foreach ($file in $coverageFiles) {
-                try {
-                    $content = Get-Content $file.FullName -Raw
-                    if ($content -match 'lines-covered="(\d+)"') { $totalLinesCovered += [int]$matches[1] }
-                    if ($content -match 'lines-valid="(\d+)"') { $totalLinesValid += [int]$matches[1] }
-                    if ($content -match 'branches-covered="(\d+)"') { $totalBranchesCovered += [int]$matches[1] }
-                    if ($content -match 'branches-valid="(\d+)"') { $totalBranchesValid += [int]$matches[1] }
-                } catch {
-                    Write-Host "  Warning: Could not parse $($file.FullName)" -ForegroundColor Yellow
-                }
-            }
-            
-            $lineRate = if ($totalLinesValid -gt 0) { [math]::Round($totalLinesCovered / $totalLinesValid * 100, 1) } else { 0 }
-            $branchRate = if ($totalBranchesValid -gt 0) { [math]::Round($totalBranchesCovered / $totalBranchesValid * 100, 1) } else { 0 }
-            
-            # Create simple HTML report
-            $htmlTemplate = @'
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Coverage Report</title>
-    <style>body{font-family:Arial,sans-serif;padding:20px;}</style>
-</head>
-<body>
-    <h1>Code Coverage Report</h1>
-    <p><strong>Line Coverage:</strong> {lineRate}% ({linesCovered}/{linesTotal})</p>
-    <p><strong>Branch Coverage:</strong> {branchRate}% ({branchesCovered}/{branchesTotal})</p>
-    <p><em>Generated: {timestamp}</em></p>
-    <p><small>Note: This is a simplified fallback report. ReportGenerator provides detailed coverage analysis.</small></p>
-</body>
-</html>
-'@
-            
-            $htmlContent = $htmlTemplate -replace '\{lineRate\}', $lineRate
-            $htmlContent = $htmlContent -replace '\{linesCovered\}', $totalLinesCovered
-            $htmlContent = $htmlContent -replace '\{linesTotal\}', $totalLinesValid
-            $htmlContent = $htmlContent -replace '\{branchRate\}', $branchRate
-            $htmlContent = $htmlContent -replace '\{branchesCovered\}', $totalBranchesCovered
-            $htmlContent = $htmlContent -replace '\{branchesTotal\}', $totalBranchesValid
-            $htmlContent = $htmlContent -replace '\{timestamp\}', (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
-            
-            $simplePath = Join-Path $reportOutputPath "index.html"
-            $htmlContent | Out-File -FilePath $simplePath -Encoding UTF8
-            Write-Host "Simple coverage report created at: $simplePath" -ForegroundColor Green
-            
-            # Also create the Cobertura.xml for the summary action
-            if ($coverageFiles.Count -gt 0) {
-                $sourceXml = $coverageFiles[0].FullName
-                $targetXml = Join-Path $reportOutputPath "Cobertura.xml"
-                Copy-Item $sourceXml $targetXml
-                Write-Host "Coverage XML for summary: $targetXml" -ForegroundColor Cyan
             }
         }
     }
