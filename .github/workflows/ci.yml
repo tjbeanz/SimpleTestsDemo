@@ -162,16 +162,20 @@ jobs:
         
     - name: Debug artifact structure
       run: |
-        echo "=== Artifact structure ==="
-        find test-reports -type f -name "*.html" -o -name "index.html" | head -20 || echo "No HTML files found"
-        echo "=== Looking for coverage report ==="
-        find test-reports -path "*/CoverageReport/index.html" -o -name "index.html" | grep -i coverage || echo "No coverage index.html found"
-        echo "=== All files in test-reports ==="
-        ls -la test-reports/ || echo "test-reports directory not found"
-        echo "=== TestResults structure if it exists ==="
-        if [ -d "test-reports/TestResults" ]; then
-          find test-reports/TestResults -name "*.html" | head -10
+        echo "=== Current directory ==="
+        pwd
+        echo "=== Contents of current directory ==="
+        ls -la
+        echo "=== test-reports structure ==="
+        if [ -d "test-reports" ]; then
+          echo "test-reports is a directory"
+          find test-reports -type f | sort | head -20
+        else
+          echo "test-reports is not a directory"
+          ls -la test-reports 2>/dev/null || echo "test-reports does not exist"
         fi
+        echo "=== Looking for HTML files ==="
+        find . -name "*.html" -type f | sort | head -20
         
     - name: Create Pages Index
       run: |
@@ -238,9 +242,22 @@ jobs:
         </html>
         EOF
         
-        # Copy reports to pages directory - we know the structure is flat
+        # Copy reports to pages directory preserving structure
         echo "Copying test reports to pages directory..."
-        cp -r test-reports/* pages/
+        if [ -d "test-reports" ]; then
+          echo "test-reports exists as directory"
+          # Check if there are subdirectories
+          if ls test-reports/ | grep -q '^[^.]*/$'; then
+            echo "Found subdirectories, copying with structure preservation"
+            cp -r test-reports/* pages/
+          else
+            echo "No subdirectories found, files are flat"
+            cp -r test-reports/* pages/ 2>/dev/null || cp -r test-reports/. pages/
+          fi
+        else
+          echo "test-reports not found as directory"
+          ls -la | grep test-reports || echo "No test-reports found at all"
+        fi
         
         # Verify the structure we created
         echo "=== Final pages structure ==="
