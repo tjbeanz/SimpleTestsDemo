@@ -1,7 +1,7 @@
 # SimpleTestsDemo - Comprehensive Testing Demonstration
 
-[![CI/CD Pipeline](https://github.com/yourusername/SimpleTestsDemo/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/yourusername/SimpleTestsDemo/actions/workflows/ci-cd.yml)
-[![Coverage](https://img.shields.io/badge/Coverage-Check%20Actions-blue)](https://github.com/yourusername/SimpleTestsDemo/actions)
+[![CI/CD Pipeline](https://github.com/tjbeanz/SimpleTestsDemo/actions/workflows/ci.yml/badge.svg)](https://github.com/tjbeanz/SimpleTestsDemo/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/Coverage-Check%20Actions-blue)](https://github.com/tjbeanz/SimpleTestsDemo/actions)
 
 A comprehensive C# .NET 8 demonstration project showcasing **Unit Tests**, **Integration Tests**, and **Contract Tests** with advanced reporting capabilities designed for multi-repository environments.
 
@@ -157,7 +157,7 @@ Perfect for organizations with multiple repositories:
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/yourusername/SimpleTestsDemo.git
+   git clone https://github.com/tjbeanz/SimpleTestsDemo.git
    cd SimpleTestsDemo
    ```
 
@@ -311,8 +311,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 For questions, issues, or contributions:
 
-- Create an [Issue](https://github.com/yourusername/SimpleTestsDemo/issues)
-- Start a [Discussion](https://github.com/yourusername/SimpleTestsDemo/discussions)
+- Create an [Issue](https://github.com/tjbeanz/SimpleTestsDemo/issues)
+- Start a [Discussion](https://github.com/tjbeanz/SimpleTestsDemo/discussions)
 - Contact the maintainers
 
 ---
