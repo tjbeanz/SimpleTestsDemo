@@ -132,8 +132,7 @@ jobs:
       if: always()
       with:
         name: test-reports-${{ github.run_number }}
-        path: |
-          TestResults/
+        path: TestResults/
         retention-days: 30
 
   # Deploy coverage reports to GitHub Pages
@@ -231,6 +230,7 @@ jobs:
                 
                 <div class="timestamp">
                     <p>Generated on: <span id="timestamp"></span></p>
+                    <p><a href="debug.html">🐛 Debug Info</a></p>
                     <script>document.getElementById('timestamp').textContent = new Date().toUTCString();</script>
                 </div>
             </div>
@@ -250,6 +250,31 @@ jobs:
         # Verify the structure we created
         echo "=== Final pages structure ==="
         find pages -name "index.html" -o -name "*.html" | head -10
+        
+        # Create a debug page showing file structure
+        cat > pages/debug.html << 'EOF'
+        <!DOCTYPE html>
+        <html><head><title>Debug - File Structure</title></head><body>
+        <h1>Debug Information</h1>
+        <h2>Files in pages directory:</h2>
+        <pre>
+        EOF
+        find pages -type f | sort >> pages/debug.html
+        cat >> pages/debug.html << 'EOF'
+        </pre>
+        <h2>Coverage Report Check:</h2>
+        <pre>
+        EOF
+        if [ -f "pages/CoverageReport/index.html" ]; then
+          echo "Coverage report EXISTS at pages/CoverageReport/index.html" >> pages/debug.html
+        else
+          echo "Coverage report NOT FOUND at pages/CoverageReport/index.html" >> pages/debug.html
+        fi
+        cat >> pages/debug.html << 'EOF'
+        </pre>
+        <p><a href="index.html">Back to main page</a></p>
+        </body></html>
+        EOF
         
     - name: Setup Pages
       uses: actions/configure-pages@v4
