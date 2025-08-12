@@ -189,10 +189,12 @@ if ($GenerateReports -and $GenerateCoverage) {
         
         if (!$reportGeneratorExists) {
             Write-Host "Installing ReportGenerator tool..." -ForegroundColor Yellow
-            dotnet tool install --global dotnet-reportgenerator-globaltool --ignore-failed-sources 2>$null
+            dotnet tool install --global dotnet-reportgenerator-globaltool --ignore-failed-sources
             if ($LASTEXITCODE -eq 0) { 
                 $reportGeneratorExists = $true 
                 Write-Host "ReportGenerator installed successfully" -ForegroundColor Green
+            } else {
+                Write-Host "Failed to install ReportGenerator" -ForegroundColor Red
             }
         }
         
@@ -205,14 +207,15 @@ if ($GenerateReports -and $GenerateCoverage) {
                 "-reporttypes:Html;Cobertura;JsonSummary;TextSummary"
             )
             
-            & dotnet reportgenerator $reportArgs 2>$null
+            & dotnet reportgenerator $reportArgs
             
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "Coverage reports generated successfully" -ForegroundColor Green
                 Write-Host "Coverage report location: $reportOutputPath\index.html" -ForegroundColor Cyan
             }
             else {
-                Write-Host "Coverage report generation had issues" -ForegroundColor Yellow
+                Write-Host "Coverage report generation failed with exit code $LASTEXITCODE" -ForegroundColor Red
+                Write-Host "ReportGenerator arguments were: $($reportArgs -join ' ')" -ForegroundColor Yellow
             }
         }
         else {

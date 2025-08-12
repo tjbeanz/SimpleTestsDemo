@@ -31,11 +31,53 @@ jobs:
     - name: Build
       run: dotnet build --no-restore --configuration Release
       
+    - name: Install ReportGenerator tool
+      run: |
+        dotnet tool install --global dotnet-reportgenerator-globaltool
+        
     - name: Run Tests with PowerShell Script
       shell: pwsh
       run: |
         # Make the script executable and run it with coverage
         ./run-tests-simple.ps1 -Configuration Release -GenerateCoverage -GenerateReports
+        
+    - name: Debug TestResults Structure
+      shell: pwsh
+      run: |
+        Write-Host "=== TestResults directory structure ==="
+        if (Test-Path "TestResults") {
+          Get-ChildItem -Path "TestResults" -Recurse | Where-Object { $_.Name -like "*.html" -or $_.Name -like "*.xml" -or $_.PSIsContainer } | ForEach-Object {
+            $relativePath = $_.FullName.Replace("$PWD\TestResults", "TestResults")
+            if ($_.PSIsContainer) {
+              Write-Host "📁 $relativePath/"
+            } else {
+              Write-Host "📄 $relativePath"
+            }
+          }
+        } else {
+          Write-Host "❌ TestResults directory not found"
+        }
+        
+        Write-Host "`n=== Coverage Report Check ==="
+        if (Test-Path "TestResults/CoverageReport/index.html") {
+          Write-Host "✅ Coverage report HTML found"
+          $size = (Get-Item "TestResults/CoverageReport/index.html").Length
+          Write-Host "   Size: $size bytes"
+        } else {
+          Write-Host "❌ Coverage report HTML NOT found"
+        }
+        
+        Write-Host "`n=== Coverage XML files ==="
+        $xmlFiles = Get-ChildItem -Path "TestResults" -Recurse -Filter "*.cobertura.xml" -ErrorAction SilentlyContinue
+        if ($xmlFiles) {
+          Write-Host "Found $($xmlFiles.Count) coverage XML files:"
+          $xmlFiles | ForEach-Object {
+            $relativePath = $_.FullName.Replace("$PWD\TestResults", "TestResults")
+            Write-Host "  📄 $relativePath"
+          }
+        } else {
+          Write-Host "❌ No coverage XML files found"
+        }
         
     - name: Debug Coverage Files
       shell: pwsh
